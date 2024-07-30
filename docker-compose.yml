@@ -1,0 +1,42 @@
+version: "3.7"
+
+networks:
+  lhn_docker_network:
+    driver: bridge
+
+volumes:
+  vendor:
+  lhn_db_data:
+
+services:
+  lhn-app:
+    build:
+      context: ./
+      dockerfile: ./build/local/dockerfile
+    image: lhn-app
+    container_name: lhnwithdocker
+    restart: unless-stopped
+    volumes:
+      - ./build/docker/000-default.conf:/etc/apache2/sites-available/apache.conf
+      - ./build/docker/php.ini:/usr/local/etc/php/conf.d/php.ini
+      - ./:/var/www/lhn
+      - vendor:/var/www/lhn/vendor
+    ports:
+      - "47899:80"
+    networks:
+      - lhn_docker_network
+
+  lhn-db:
+    image: mysql:8.0
+    container_name: lhn-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: lhn
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_PASSWORD: root
+    ports:
+      - "47898:3306"
+    volumes:
+      - lhn_db_data:/var/lib/mysql
+    networks:
+      - lhn_docker_network

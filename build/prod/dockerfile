@@ -1,0 +1,92 @@
+FROM php:8.2.3-apache-bullseye
+
+# Update OS for security
+RUN apt update && apt full-upgrade -y && apt autoremove -y
+
+# Install required apps for Web App to work
+RUN curl -fsSL https://deb.nodesource.com/setup_current.x | bash -
+RUN apt install -y \
+    git \
+    nano \
+    zip \
+    unzip \
+    kmod \
+    module-assistant \
+    libcurl4-openssl-dev \
+    curl libicu-dev \
+    mariadb-server \
+    wget \
+    libzip4 \
+    pkg-config \
+    libxml2 \
+    zlib1g \
+    openjdk-11-jdk \
+    nodejs \
+    nodejs-legacy
+RUN npm install -g npm@latest
+
+# Install essential extensions and components
+RUN apt install -y \
+    libxml2-dev \
+    libpng-dev \
+    zlib1g-dev \
+    libxml2-dev \
+    libzip-dev \
+    libwebp-dev \
+    libjpeg62-turbo-dev \
+    libxpm-dev \
+    libfreetype6-dev
+RUN docker-php-ext-configure gd \
+    --with-jpeg \
+    --with-freetype \
+    --with-webp
+RUN docker-php-ext-install xml gd soap zip mysqli pdo pdo_mysql opcache
+RUN docker-php-ext-install curl
+RUN docker-php-ext-configure intl \
+    && docker-php-ext-install intl
+# RUN pecl install grpc
+        
+# Copy project to container
+RUN mkdir /var/www/lhn
+COPY . /var/www/lhn/
+WORKDIR /var/www/lhn/
+
+# Blank www for security
+RUN touch /var/www/html/index.html
+
+# set PHP configuration
+COPY ./build/prod/php.ini "$PHP_INI_DIR/php.ini"
+
+# Set Apache Configurations
+RUN a2enmod rewrite ssl headers
+RUN a2dismod deflate -f
+COPY ./build/prod/000-default.conf /etc/apache2/sites-available/000-default.conf
+# COPY ./build/prod/default-ssl.conf /etc/apache2/sites-available/default-ssl.conf
+RUN /etc/init.d/apache2 restart
+
+# Install composer
+RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" && php composer-setup.php --install-dir=/usr/local/bin --filename=composer && php -r "unlink('composer-setup.php');"
+
+# Install app libraries
+# RUN cd /var/www/lhn/ && composer install -o
+
+# Copy configuration
+COPY ./build/prod/.env /var/www/lhn/.env
+
+# Run NPM install
+RUN cd /var/www/lhn/ \
+    && npm install \
+    && npm run build
+
+# Clear Cache
+# RUN cd /var/www/lhn/ && php artisan cache:clear && php artisan route:clear && php artisan config:clear && php artisan view:clear
+
+# Create folder for EFS AP
+RUN mkdir /var/www/lhn/public/storage
+    
+# Set File and Folder permissions, and ownership
+RUN chown -R www-data:www-data /var/www/lhn
+RUN chmod -R 755 /var/www/lhn
+
+EXPOSE 80
+EXPOSE 443
